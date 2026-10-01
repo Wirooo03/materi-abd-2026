@@ -25,11 +25,20 @@ import sys
 print(f"Python version: {sys.version}")
 
 # Core tools
+from pathlib import Path
+
 import polars as pl
 import duckdb
 import plotly
 import plotly.express as px
 import pyarrow as pa
+
+repo_root = Path(__file__).resolve().parents[2]
+slides_dir = repo_root / "slides" / "P01_pengantar"
+assets_dir = slides_dir / "assets"
+assets_dir.mkdir(parents=True, exist_ok=True)
+temp_dir = repo_root / ".tmp_data"
+temp_dir.mkdir(parents=True, exist_ok=True)
 
 print(f"\nPolars version:  {pl.__version__}")
 print(f"DuckDB version:  {duckdb.__version__}")
@@ -240,9 +249,10 @@ for bar, nilai in zip(bars, waktu):
     plt.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
              f"{nilai:.4f} s", ha="center", va="bottom")
 plt.tight_layout()
-plt.savefig("/home/jovyan/work/slides/P01_pengantar/assets/benchmark.png", dpi=160)
+output_png = assets_dir / "benchmark.png"
+plt.savefig(output_png, dpi=160)
 plt.close()
-print("Grafik disimpan ke slides/P01_pengantar/assets/benchmark.png")
+print(f"Grafik disimpan ke {output_png.relative_to(repo_root)}")
 
 # %% [markdown]
 # ---
@@ -254,8 +264,8 @@ print("Grafik disimpan ke slides/P01_pengantar/assets/benchmark.png")
 import os
 
 # Simpan sebagai CSV dan Parquet
-csv_path = "/tmp/demo_data.csv"
-parquet_path = "/tmp/demo_data.parquet"
+csv_path = temp_dir / "demo_data.csv"
+parquet_path = temp_dir / "demo_data.parquet"
 
 df_polars.write_csv(csv_path)
 df_polars.write_parquet(parquet_path)

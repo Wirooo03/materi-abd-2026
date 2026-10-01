@@ -24,10 +24,16 @@
 # untuk mendemonstrasikan keunggulan Polars pada data berskala besar.
 
 # %%
+from pathlib import Path
+
 import polars as pl
 import numpy as np
 import time
 import os
+
+repo_root = Path(__file__).resolve().parents[2]
+temp_dir = repo_root / ".tmp_data"
+temp_dir.mkdir(parents=True, exist_ok=True)
 
 # Seed untuk reproduktibilitas
 np.random.seed(2026)
@@ -247,9 +253,10 @@ print(top_kombinasi)
 # %%
 # Simpan dataset ke file terlebih dahulu
 print("Menyimpan data ke file...")
-os.makedirs("/tmp/bigdata_demo", exist_ok=True)
-parquet_path = "/tmp/bigdata_demo/transaksi.parquet"
-csv_path = "/tmp/bigdata_demo/transaksi.csv"
+bigdata_dir = temp_dir / "bigdata_demo"
+bigdata_dir.mkdir(parents=True, exist_ok=True)
+parquet_path = bigdata_dir / "transaksi.parquet"
+csv_path = bigdata_dir / "transaksi.csv"
 
 df.write_parquet(parquet_path)
 df.write_csv(csv_path)
@@ -441,7 +448,7 @@ print(
 # %%
 # Simpan dengan partisi per kategori
 print("=== Menulis Parquet dengan Partisi ===")
-output_dir = "/tmp/bigdata_demo/transaksi_partisi"
+output_dir = bigdata_dir / "transaksi_partisi"
 
 (
     df_enriched
@@ -456,7 +463,7 @@ print(f"Data terpartisi tersimpan di: {output_dir}")
 
 # Lihat struktur folder partisi
 for dirpath, dirnames, filenames in os.walk(output_dir):
-    depth = dirpath.replace(output_dir, "").count(os.sep)
+    depth = os.path.relpath(dirpath, output_dir).count(os.sep)
     if depth <= 2:
         indent = "  " * depth
         print(f"{indent}{os.path.basename(dirpath)}/")

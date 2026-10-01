@@ -21,12 +21,18 @@
 # ## Bagian 1: Persiapan — DuckDB dan Dataset
 
 # %%
+from pathlib import Path
+
 import duckdb
 import polars as pl
 import numpy as np
 import time
 import os
 import json
+
+repo_root = Path(__file__).resolve().parents[2]
+temp_dir = repo_root / ".tmp_data"
+temp_dir.mkdir(parents=True, exist_ok=True)
 
 # Buat koneksi DuckDB (in-memory database)
 con = duckdb.connect()
@@ -56,8 +62,8 @@ status_list = ["selesai", "proses", "antrian", "ditolak", "batal"]
 
 data = {
     "id_layanan": range(N),
-    "tanggal": pl.date_range(
-        pl.date(2023, 1, 1), pl.date(2024, 12, 31), interval="1h",
+    "tanggal": pl.datetime_range(
+        pl.datetime(2023, 1, 1), pl.datetime(2024, 12, 31), interval="1h",
         eager=True
     ).sample(N, with_replacement=True, seed=2026),
     "jenis_layanan": np.random.choice(layanan_list, N),
@@ -74,15 +80,22 @@ data = {
 df = pl.DataFrame(data)
 
 # Simpan ke berbagai format
-os.makedirs("/tmp/layanan_publik", exist_ok=True)
-parquet_path = "/tmp/layanan_publik/layanan.parquet"
-csv_path = "/tmp/layanan_publik/layanan.csv"
-json_path = "/tmp/layanan_publik/layanan_sample.json"
+layanan_dir = temp_dir / "layanan_publik"
+layanan_dir.mkdir(parents=True, exist_ok=True)
+parquet_path = layanan_dir / "layanan.parquet"
+csv_path = layanan_dir / "layanan.csv"
+json_path = layanan_dir / "layanan_sample.json"
 
 df.write_parquet(parquet_path)
 df.write_csv(csv_path)
 # Simpan 1000 baris sebagai JSON (JSON cocok untuk sample kecil)
-df.head(1_000).write_json(json_path, row_oriented=True)
+sample_json = (
+    df.head(1_000)
+    .with_columns(pl.col("tanggal").dt.to_string("%Y-%m-%d %H:%M:%S").alias("tanggal"))
+    .to_dicts()
+)
+with open(json_path, "w", encoding="utf-8") as f:
+    json.dump(sample_json, f)
 
 print(f"Dataset dibuat: {N:,} baris")
 print(f"  Parquet: {os.path.getsize(parquet_path)/1e6:.1f} MB")
@@ -268,7 +281,7 @@ print(hasil_running)
 # %%
 # Simpan data dengan partisi per provinsi dan jenis layanan
 print("=== Membuat Partitioned Parquet ===")
-partisi_dir = "/tmp/layanan_partisi"
+partisi_dir = temp_dir / "layanan_partisi"
 
 (
     df.with_columns([
@@ -368,7 +381,7 @@ print("=== Perbandingan Format Data ===")
 
 import pyarrow.feather as feather
 
-arrow_path = "/tmp/layanan_publik/layanan.arrow"
+arrow_path = layanan_dir / "layanan.arrow"
 
 # Simpan ke Arrow/Feather format
 df_polars.write_ipc(arrow_path)
@@ -399,6 +412,7 @@ for fmt, reader, path in [
 # %%
 # COPY TO: export hasil query langsung ke file
 print("=== Export Hasil Query ke Parquet ===")
+ringkasan_path = layanan_dir / "ringkasan.parquet"
 con.execute(f"""
     COPY (
         SELECT
@@ -411,10 +425,10 @@ con.execute(f"""
         WHERE status = 'selesai'
         GROUP BY provinsi, jenis_layanan
     )
-    TO '/tmp/layanan_publik/ringkasan.parquet'
+    TO '{ringkasan_path}'
     (FORMAT PARQUET)
 """)
-print("Ringkasan tersimpan ke: /tmp/layanan_publik/ringkasan.parquet")
+print(f"Ringkasan tersimpan ke: {ringkasan_path}")
 
 # %%
 # DuckDB: CTE (Common Table Expression) bertingkat

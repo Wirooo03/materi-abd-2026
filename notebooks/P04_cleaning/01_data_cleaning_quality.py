@@ -24,10 +24,16 @@
 # masalah kualitas data yang umum ditemui di industri.
 
 # %%
+from pathlib import Path
+
 import polars as pl
 import duckdb
 import numpy as np
 import os
+
+repo_root = Path(__file__).resolve().parents[2]
+temp_dir = repo_root / ".tmp_data"
+temp_dir.mkdir(parents=True, exist_ok=True)
 
 np.random.seed(42)
 N = 500_000
@@ -42,7 +48,12 @@ id_arr = list(range(N))
 # Sisipkan 5% duplikat
 duplikat_idx = np.random.choice(N, size=int(N * 0.05), replace=False)
 
-tanggal_base = pl.date_range(pl.date(2024, 1, 1), pl.date(2024, 12, 31), interval="1h", eager=True)
+tanggal_base = pl.datetime_range(
+    pl.datetime(2024, 1, 1),
+    pl.datetime(2024, 12, 31),
+    interval="1h",
+    eager=True,
+)
 tanggal_arr = tanggal_base.sample(N, with_replacement=True, seed=42)
 
 harga_arr = np.random.randint(10_000, 5_000_000, N).astype(float)
@@ -104,7 +115,21 @@ con = duckdb.connect()
 con.register("transaksi", df_kotor)
 
 print("=== DuckDB SUMMARIZE: Profiling Cepat ===")
-profil = con.execute("SUMMARIZE SELECT * FROM transaksi").df()
+try:
+    profil = con.execute("SUMMARIZE SELECT * FROM transaksi").df()
+except Exception:
+    profil = con.execute("""
+        SELECT
+            column_name AS column_name,
+            data_type AS column_type,
+            NULL AS min,
+            NULL AS max,
+            NULL AS avg,
+            NULL AS std
+        FROM information_schema.columns
+        WHERE table_name = 'transaksi'
+        ORDER BY column_name
+    """).df()
 print(profil.to_string())
 
 # %%
@@ -535,9 +560,11 @@ print(f"Setelah cleaning:  {len(df_bersih):,} baris")
 print(f"Baris dihapus:     {len(df_kotor) - len(df_bersih):,}")
 
 # Simpan hasil bersih
-os.makedirs("/tmp/transaksi_bersih", exist_ok=True)
-df_bersih.write_parquet("/tmp/transaksi_bersih/transaksi_bersih.parquet")
-print("\nData bersih tersimpan ke: /tmp/transaksi_bersih/transaksi_bersih.parquet")
+output_dir = temp_dir / "transaksi_bersih"
+output_dir.mkdir(parents=True, exist_ok=True)
+parquet_output = output_dir / "transaksi_bersih.parquet"
+df_bersih.write_parquet(parquet_output)
+print(f"\nData bersih tersimpan ke: {parquet_output}")
 print(df_bersih.head(5))
 
 # %%
